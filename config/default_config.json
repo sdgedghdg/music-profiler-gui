@@ -1,0 +1,17 @@
+{
+    "tools": {
+        "ffmpeg": null,
+        "ffprobe": null,
+        "demucs": null
+    },
+    "workspace": "./workspace",
+    "playlist": {
+        "default_id": null
+    },
+    "export": {
+        "reference_duration_minutes": 25,
+        "default_format": "mp3",
+        "default_bitrate_kbps": 320,
+        "default_sample_rate_hz": 44100
+    }
+}

@@ -1,0 +1,57 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Workspace (user data, regeneratable)
+workspace/
+
+# Environment
+.env
+
+# Python
+*.egg-info/
+dist/
+build/
+
+# Config (user-specific paths, contains local tool paths)
+config.json
+
+# Demucs output (large generated files)
+demucs_output/
+separated/
+
+# Export output
+export/
+
+# Temp files
+temp/
+*.tmp
+*.log
+
+# um tool source (reference only, not part of the app)
+um-main/
+
+# cache
+.pytest_cache
+
+# you know why
+.claude/
+AI_COLLAB.md
+CLAUDE.md
+TODO.md
+.notgit/
