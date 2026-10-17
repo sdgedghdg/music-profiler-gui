@@ -13,6 +13,8 @@ from services.playlist_service import PlaylistService
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_REFERENCE_MINUTES = 25
+
 
 class PlaylistPanel(ttk.Frame):
     """Left-right split panel for playlist management."""
@@ -143,11 +145,20 @@ class PlaylistPanel(ttk.Frame):
         if restore >= 0:
             self._playlist_listbox.selection_set(restore)
             self._playlist_listbox.see(restore)
+    def _ref_minutes(self) -> int:
+        """Read the reference duration, tolerating an emptied entry field."""
+        try:
+            value = self._ref.get()
+        except (tk.TclError, ValueError):
+            value = _DEFAULT_REFERENCE_MINUTES
+            self._ref.set(value)
+        return value if value > 0 else _DEFAULT_REFERENCE_MINUTES
+
     def _load_songs(self, pid: int) -> None:
         try:
             pl = self._playlist_service.get(pid)
             stats = self._playlist_service.get_stats(pid)
-            rem = self._playlist_service.get_remaining_time(pid, self._ref.get())
+            rem = self._playlist_service.get_remaining_time(pid, self._ref_minutes())
         except Exception:
             logger.exception("load %d failed", pid)
             messagebox.showerror(t("playlist.error"), t("playlist.error_load_songs"))
@@ -164,7 +175,7 @@ class PlaylistPanel(ttk.Frame):
             t("playlist.stats").format(
                 name=pl.name, count=stats.song_count,
                 total=format_duration(stats.total_duration_ms),
-                remaining=format_duration(rem), ref=self._ref.get())
+                remaining=format_duration(rem), ref=self._ref_minutes())
         )
     def _on_pick(self) -> None:
         sel = self._playlist_listbox.curselection()

@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 from core.enums import TaskStatus, TaskType
+from core.exceptions import ToolNotFoundError
 from core.models import Song, TaskInfo
 from database.song_repo import SongRepo
 from services.task_service import TaskService
@@ -18,14 +19,15 @@ logger = logging.getLogger(__name__)
 
 
 def _execute_separation(
-    song: Song, demucs: Demucs, ffmpeg: FFmpeg, workspace: Path
+    song: Song, demucs: Demucs, ffmpeg: FFmpeg, workspace: Path,
+    model: str = "htdemucs",
 ) -> dict:
     """Run Demucs separation pipeline and return result paths."""
     with tempfile.TemporaryDirectory(prefix="musprof_demucs_") as tmpdir:
         tmpdir_path = Path(tmpdir)
 
         # 1. Run Demucs separation
-        result = demucs.separate(song.file_path, tmpdir_path)
+        result = demucs.separate(song.file_path, tmpdir_path, model=model)
         stem_dir = Path(result.output_dir)
 
         # 2. Find non-vocal stems (everything except vocals.*)
@@ -79,8 +81,10 @@ class DemucsService:
         self._ffmpeg = ffmpeg
         self._workspace = workspace
 
-    def separate(self, song_ids: list[int]) -> TaskInfo:
+    def separate(self, song_ids: list[int], model: str = "htdemucs") -> TaskInfo:
         """Create and enqueue a vocal separation task."""
+        if self._demucs is None:
+            raise ToolNotFoundError("Demucs 未配置")
         for sid in song_ids:
             self._song_repo.get_by_id(sid)
 
@@ -89,7 +93,7 @@ class DemucsService:
             task_type=TaskType.DEMUCS,
             status=TaskStatus.PENDING,
             progress=0.0,
-            input_data={"song_ids": song_ids},
+            input_data={"song_ids": song_ids, "model": model},
         )
         return self._task_service.enqueue(task)
 

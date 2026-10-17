@@ -157,6 +157,7 @@ class MusicProfilerApp:
 
         self.demucs_panel = DemucsPanel(
             notebook, self.demucs_service, self.library_service,
+            self.config_service,
         )
         notebook.add(self.demucs_panel, text=t("tab.demucs"))
 

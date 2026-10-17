@@ -10,6 +10,7 @@ from tkinter import messagebox
 
 import ttkbootstrap as ttk
 
+from core.exceptions import ToolNotFoundError
 from core.formatters import format_duration
 from core.i18n import t
 from core.models import Song, TaskInfo
@@ -149,7 +150,15 @@ class DemucsPanel(ttk.Frame):
         if not (ids := self._get_selected_ids()):
             return messagebox.showwarning(
                 t("demucs.no_selection"), t("demucs.no_selection_msg"))
-        task = self._demucs_service.separate(ids)
+        try:
+            task = self._demucs_service.separate(ids, model=self._model_var.get())
+        except ToolNotFoundError as exc:
+            messagebox.showerror(t("demucs.unavailable"), str(exc))
+            return
+        except Exception as exc:
+            logger.exception("Failed to create demucs task")
+            messagebox.showerror(t("demucs.unavailable"), str(exc))
+            return
         for sid in ids:
             song = self._song_map.get(str(sid))
             if song:
@@ -213,7 +222,7 @@ class DemucsPanel(ttk.Frame):
     def _update_separate_btn(self) -> None:
         has_sel = bool(self._get_selected_ids())
         configured = True
-        if self._config:
+        if self._config is not None:
             configured = bool(self._config.get_tool_path("demucs"))
         self._separate_btn.configure(
             state=tk.NORMAL if (has_sel and configured) else tk.DISABLED)

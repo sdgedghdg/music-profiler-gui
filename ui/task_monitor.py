@@ -8,6 +8,7 @@ from typing import Any
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
+from core.exceptions import TaskNotFoundError
 from core.i18n import t
 from core.models import TaskInfo
 from services.task_service import TaskService
@@ -167,6 +168,8 @@ class TaskMonitor(ttk.Frame):
                 self._task_service.cancel(int(sel[0]))
             except ValueError:
                 logger.warning("Cannot cancel task %s — not pending", sel[0])
+            except TaskNotFoundError:
+                logger.warning("Task %s no longer exists", sel[0])
             self._refresh()
 
     def _on_right_click(self, event: Any) -> None:

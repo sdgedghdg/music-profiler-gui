@@ -6,7 +6,7 @@ import logging
 import sqlite3
 from datetime import datetime, timezone
 
-from core.exceptions import PlaylistNotFoundError
+from core.exceptions import PlaylistNotFoundError, ValidationError
 from core.models import Playlist, PlaylistItem
 from database.serializers import row_to_playlist_item
 
@@ -128,18 +128,33 @@ class PlaylistRepo:
         self, playlist_id: int, song_id: int, separated_track_id: int | None
     ) -> None:
         self.get_by_id(playlist_id)
+        # The UNIQUE index only covers original songs (separated_track_id IS
+        # NULL), so instrumentals need an explicit duplicate check to keep the
+        # two cases consistent.
+        if separated_track_id is not None:
+            duplicate = self._conn.execute(
+                "SELECT 1 FROM playlist_items "
+                "WHERE playlist_id=? AND song_id=? AND separated_track_id=?",
+                (playlist_id, song_id, separated_track_id),
+            ).fetchone()
+            if duplicate is not None:
+                raise ValidationError("这首歌已经在歌单中了")
         row = self._conn.execute(
             "SELECT COALESCE(MAX(sort_order), -1) AS max_order "
             "FROM playlist_items WHERE playlist_id=?",
             (playlist_id,),
         ).fetchone()
-        self._conn.execute(
-            "INSERT INTO playlist_items "
-            "(playlist_id, song_id, separated_track_id, sort_order) "
-            "VALUES (?, ?, ?, ?)",
-            (playlist_id, song_id, separated_track_id, row["max_order"] + 1),
-        )
-        self._conn.commit()
+        try:
+            self._conn.execute(
+                "INSERT INTO playlist_items "
+                "(playlist_id, song_id, separated_track_id, sort_order) "
+                "VALUES (?, ?, ?, ?)",
+                (playlist_id, song_id, separated_track_id, row["max_order"] + 1),
+            )
+            self._conn.commit()
+        except sqlite3.IntegrityError as exc:
+            self._conn.rollback()
+            raise ValidationError("这首歌已经在歌单中了") from exc
 
     def _load_items(self, playlist_id: int) -> list[PlaylistItem]:
         rows = self._conn.execute(

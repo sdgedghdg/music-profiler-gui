@@ -76,7 +76,12 @@ class PlaylistService:
         self._config_service.set_default_playlist_id(playlist_id)
 
     def add_songs(self, playlist_id: int, song_ids: list[int]) -> None:
-        """Add original songs to the end of a playlist."""
+        """Add original songs to the end of a playlist.
+
+        Raises:
+            ValidationError: If a song is already in the playlist.
+            SongNotFoundError: If a song id does not exist.
+        """
         for song_id in song_ids:
             self._song_repo.get_by_id(song_id)
             self._playlist_repo.add_song(playlist_id, song_id)

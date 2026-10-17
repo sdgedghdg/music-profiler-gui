@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.exceptions import ToolExecutionError
-from tools.base import ToolRunner
+from tools.base import ToolRunner, require_runner
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class DemucsResult:
 class Demucs:
     """Wrapper around demucs for source separation."""
 
-    def __init__(self, runner: ToolRunner) -> None:
+    def __init__(self, runner: ToolRunner | None = None) -> None:
         self._runner = runner
 
     def separate(
@@ -34,6 +34,7 @@ class Demucs:
         model: str = "htdemucs",
     ) -> DemucsResult:
         """Run two-stem (vocals) separation and return the result paths."""
+        runner = require_runner(self._runner)
         input_path = Path(input_path)
         output_dir = Path(output_dir)
 
@@ -48,7 +49,7 @@ class Demucs:
             args.insert(0, "-n")
 
         logger.info("Separating: %s (model=%s)", input_path, model)
-        self._runner.run(args)
+        runner.run(args)
 
         # Demucs writes to: <output_dir>/<model>/<input_stem>/
         model_dir = output_dir / model

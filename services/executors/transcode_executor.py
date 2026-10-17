@@ -48,7 +48,7 @@ class TranscodeExecutor:
 
         output_format = config.get("output_format") or config.get("format", "mp3")
         ff_config = FFmpegConfig(
-            format=output_format,
+            output_format=output_format,
             bitrate_bps=config.get("bitrate_bps", 320000),
             sample_rate_hz=config.get("sample_rate_hz", 44100),
             channels=config.get("channels", 2),

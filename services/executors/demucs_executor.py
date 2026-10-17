@@ -48,6 +48,7 @@ class DemucsExecutor:
 
         input_data: dict = task.input_data or {}
         song_ids: list[int] = input_data.get("song_ids", [])
+        model: str = input_data.get("model", "htdemucs")
         if not song_ids:
             logger.info("No song_ids in demucs task id=%d", task.id)
             self._task_repo.update_output(task.id, {"processed_song_ids": []})
@@ -68,7 +69,9 @@ class DemucsExecutor:
                 logger.exception("Failed to load song id=%d", song_id)
                 continue
 
-            result_paths = _execute_separation(song, self._demucs, self._ffmpeg, self._workspace)
+            result_paths = _execute_separation(
+                song, self._demucs, self._ffmpeg, self._workspace, model,
+            )
 
             if self._separated_track_repo is not None:
                 self._separated_track_repo.delete_by_song(song_id)
