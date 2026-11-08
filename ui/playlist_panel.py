@@ -2,12 +2,17 @@
 
 import logging
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import filedialog, messagebox, simpledialog
 
 import ttkbootstrap as ttk
 
 from core.formatters import format_duration
 from core.i18n import t
+from core.playlist_table import (
+    PlaylistTableFormat,
+    resolve_table_path,
+    suggest_filename,
+)
 from services.library_service import LibraryService
 from services.playlist_service import PlaylistService
 
@@ -88,6 +93,8 @@ class PlaylistPanel(ttk.Frame):
         ttk.Button(rf, text=t("playlist.move_up"), command=lambda: self._move(-1), bootstyle="secondary").pack(side=tk.LEFT, padx=(0, 3))
         ttk.Button(rf, text=t("playlist.move_down"), command=lambda: self._move(1), bootstyle="secondary").pack(side=tk.LEFT, padx=3)
         ttk.Button(rf, text=t("playlist.remove"), command=self._on_rm, bootstyle="danger").pack(side=tk.LEFT, padx=3)
+        ttk.Button(rf, text=t("playlist.export_table"), command=self._on_export_table,
+                   bootstyle="secondary").pack(side=tk.RIGHT, padx=3)
         # Search
         ttk.Separator(p).pack(fill=tk.X, pady=(5, 5))
         sf = ttk.Frame(p)
@@ -284,6 +291,49 @@ class PlaylistPanel(ttk.Frame):
                 messagebox.showerror(t("playlist.error"), "Could not remove song.")
                 return
         self._load_songs(self._playlist_id)
+
+    def _on_export_table(self) -> None:
+        """Save the selected playlist as a CSV or Markdown table."""
+        pid = self._playlist_id
+        if pid is None:
+            messagebox.showwarning(
+                t("playlist.export_table_no_selection"),
+                t("playlist.export_table_no_selection_msg"), parent=self)
+            return
+        try:
+            playlist = self._playlist_service.get(pid)
+        except Exception:
+            logger.exception("load playlist for table export failed")
+            messagebox.showerror(
+                t("playlist.error"), t("playlist.error_load_songs"), parent=self)
+            return
+        destination = filedialog.asksaveasfilename(
+            parent=self,
+            title=t("playlist.export_table_title"),
+            defaultextension=PlaylistTableFormat.CSV.extension,
+            filetypes=[
+                (t("playlist.export_table_csv_type"), "*.csv"),
+                (t("playlist.export_table_md_type"), "*.md"),
+            ],
+            initialfile=suggest_filename(playlist.name),
+        )
+        if not destination:
+            return
+        try:
+            path, fmt = resolve_table_path(destination)
+            written = self._playlist_service.export_table(pid, path, fmt)
+        except Exception as exc:
+            logger.exception("export playlist table failed")
+            messagebox.showerror(
+                t("playlist.export_table_error"),
+                t("playlist.export_table_error_msg").format(error=exc),
+                parent=self)
+            return
+        messagebox.showinfo(
+            t("playlist.export_table_done"),
+            t("playlist.export_table_done_msg").format(path=written),
+            parent=self)
+
     def _popup(self, event: tk.Event) -> None:
         row = self._song_tree.identify_row(event.y)
         if row:

@@ -223,6 +223,54 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "playlist.search": {"en": "Search:", "zh": "搜索："},
 
+    # -- Playlist Table Export --
+    "playlist.export_table": {"en": "Export Table", "zh": "导出歌单表"},
+    "playlist.export_table_title": {"en": "Export Playlist Table", "zh": "导出歌单表"},
+    "playlist.export_table_csv_type": {
+        "en": "CSV table (Excel)", "zh": "CSV 表格（Excel）",
+    },
+    "playlist.export_table_md_type": {
+        "en": "Markdown table", "zh": "Markdown 表格",
+    },
+    "playlist.export_table_no_selection": {
+        "en": "No Playlist Selected", "zh": "未选择歌单",
+    },
+    "playlist.export_table_no_selection_msg": {
+        "en": "Please select a playlist first.", "zh": "请先选择一个歌单。",
+    },
+    "playlist.export_table_done": {"en": "Export Complete", "zh": "导出完成"},
+    "playlist.export_table_done_msg": {
+        "en": "Playlist table saved to:\n{path}",
+        "zh": "歌单表已保存到：\n{path}",
+    },
+    "playlist.export_table_error": {"en": "Export Failed", "zh": "导出失败"},
+    "playlist.export_table_error_msg": {
+        "en": "Could not export the playlist table:\n{error}",
+        "zh": "无法导出歌单表：\n{error}",
+    },
+    "table.index": {"en": "#", "zh": "序号"},
+    "table.title": {"en": "Title", "zh": "曲名"},
+    "table.artist": {"en": "Artist", "zh": "歌手"},
+    "table.album": {"en": "Album", "zh": "专辑"},
+    "table.variant": {"en": "Version", "zh": "版本"},
+    "table.duration": {"en": "Duration", "zh": "时长"},
+    "table.cumulative": {"en": "Cumulative", "zh": "累计时长"},
+    "table.total": {"en": "Total", "zh": "合计"},
+    "table.song_count": {"en": "{count} songs", "zh": "{count} 首"},
+    "table.total_duration": {
+        "en": "Total duration: {duration}", "zh": "总时长：{duration}",
+    },
+    "table.doc_title": {"en": "Playlist — {name}", "zh": "歌单 — {name}"},
+    "table.description": {
+        "en": "Description: {description}", "zh": "说明：{description}",
+    },
+    "table.variant_original": {"en": "Original", "zh": "原曲"},
+    "table.variant_instrumental": {"en": "Instrumental", "zh": "伴奏"},
+    "table.variant_vocals": {"en": "Vocals", "zh": "人声"},
+    "table.variant_drums": {"en": "Drums", "zh": "鼓"},
+    "table.variant_bass": {"en": "Bass", "zh": "贝斯"},
+    "table.variant_other": {"en": "Other", "zh": "其他"},
+
     # -- Export Panel --
     "export.playlist": {"en": "Playlist", "zh": "歌单"},
     "export.select_playlist": {"en": "Select a playlist...", "zh": "请选择歌单..."},
