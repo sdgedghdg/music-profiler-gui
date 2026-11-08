@@ -20,6 +20,18 @@ class ToolResult:
     elapsed_ms: int
 
 
+def require_runner(runner: ToolRunner | None) -> ToolRunner:
+    """Return *runner* or raise ToolNotFoundError when it is ``None``.
+
+    用于 FFmpeg / FFprobe / Demucs 的判空：工具路径未配置时上层会传入
+    ``None``，此时尽早抛出语义明确的 ToolNotFoundError，而不是等到调用
+    ``None.run(...)`` 才炸出 AttributeError。
+    """
+    if runner is None:
+        raise ToolNotFoundError("Tool binary path is not configured")
+    return runner
+
+
 class ToolRunner:
     """Common subprocess runner with timeout, logging, and error handling."""
 

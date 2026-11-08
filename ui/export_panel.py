@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 from tkinter import messagebox
 import ttkbootstrap as ttk
@@ -12,6 +13,10 @@ from core.models import ExportConfig, Playlist
 from services.export_service import ExportService
 from services.playlist_service import PlaylistService
 from tools.platform import open_file_explorer
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_REFERENCE_MINUTES = 25
 
 
 class ExportPanel(ttk.Frame):
@@ -49,11 +54,27 @@ class ExportPanel(ttk.Frame):
             frame, textvariable=self._playlist_var, state="readonly")
         self._playlist_combo.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         self._playlist_combo.bind("<<ComboboxSelected>>", self._on_playlist_selected)
-        self._playlist_combo.bind("<Button-1>", lambda e: self._refresh_playlists())
+        self._playlist_combo.bind("<Button-1>", lambda e: self._on_combo_opened())
         ttk.Button(frame, text=t("export.validate"), command=self._on_validate,
                    width=10).grid(row=0, column=1)
         self._info_lbl = ttk.Label(frame, text="", font=("", 9), foreground="gray")
         self._info_lbl.grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+    def _on_combo_opened(self) -> None:
+        """Refresh the playlist list while keeping the visible selection in sync."""
+        keep_id = self._selected_id
+        self._refresh_playlists()
+        if keep_id is None:
+            return
+        for index, playlist in enumerate(self._playlists, start=1):
+            if playlist.id == keep_id:
+                self._playlist_combo.current(index)
+                return
+        # The selected playlist disappeared: clear the stale internal state.
+        self._selected_id = None
+        self._info_lbl.config(text="")
+        self._remaining_var.set("")
+        self._export_btn.config(state="disabled")
 
     def _refresh_playlists(self) -> None:
         self._playlists = self._playlist_service.get_all()
@@ -133,6 +154,12 @@ class ExportPanel(ttk.Frame):
         self._remaining_lbl.grid(row=1, column=0, sticky="w", pady=(4, 0))
 
     def _on_ref_changed(self, *args: object) -> None:
+        # The spinbox is editable: a partially-typed or empty value must not
+        # raise TclError out of the Tk callback.
+        try:
+            self._ref_var.get()
+        except (tk.TclError, ValueError):
+            return
         self._update_remaining()
         if self._selected_id is not None:
             self._on_playlist_selected()
@@ -141,8 +168,11 @@ class ExportPanel(ttk.Frame):
         if self._selected_id is None:
             self._remaining_var.set("")
             return
-        rem = self._playlist_service.get_remaining_time(
-            self._selected_id, self._ref_var.get())
+        try:
+            ref = self._ref_var.get()
+        except (tk.TclError, ValueError):
+            return
+        rem = self._playlist_service.get_remaining_time(self._selected_id, ref)
         direction = t("export.under") if rem >= 0 else t("export.over")
         self._remaining_var.set(
             t("export.remaining").format(
@@ -193,7 +223,7 @@ class ExportPanel(ttk.Frame):
                 output_format=self._fmt_var.get(),
                 bitrate_bps=int(self._bitrate_var.get()) * 1000,
                 sample_rate_hz=int(self._sr_var.get()),
-                reference_duration_minutes=self._ref_var.get(),
+                reference_duration_minutes=self._ref_value(),
                 crossfade_ms=0, fade_in_ms=0, fade_out_ms=0,
                 normalize_loudness=self._norm_var.get(),
             ))
@@ -203,6 +233,18 @@ class ExportPanel(ttk.Frame):
             )
         except ExportError as exc:
             messagebox.showerror(t("export.error"), str(exc))
+        except Exception as exc:  # e.g. the playlist was deleted meanwhile
+            logger.exception("Export task creation failed")
+            messagebox.showerror(t("export.error"), str(exc))
+
+    def _ref_value(self) -> int:
+        """Read the reference duration, tolerating an emptied spinbox."""
+        try:
+            value = self._ref_var.get()
+        except (tk.TclError, ValueError):
+            value = _DEFAULT_REFERENCE_MINUTES
+            self._ref_var.set(value)
+        return value if value > 0 else _DEFAULT_REFERENCE_MINUTES
 
     def _open_export_folder(self) -> None:
         d = self._export_service.get_export_path("_", "mp3").parent

@@ -7,6 +7,11 @@ from pathlib import Path
 
 from core.exceptions import PlaylistNotFoundError, ValidationError
 from core.models import Playlist, PlaylistStats
+from core.playlist_table import (
+    PlaylistTableFormat,
+    coerce_format,
+    write_playlist_table,
+)
 from database.playlist_repo import PlaylistRepo
 from database.separated_track_repo import SeparatedTrackRepo
 from database.song_repo import SongRepo
@@ -76,7 +81,12 @@ class PlaylistService:
         self._config_service.set_default_playlist_id(playlist_id)
 
     def add_songs(self, playlist_id: int, song_ids: list[int]) -> None:
-        """Add original songs to the end of a playlist."""
+        """Add original songs to the end of a playlist.
+
+        Raises:
+            ValidationError: If a song is already in the playlist.
+            SongNotFoundError: If a song id does not exist.
+        """
         for song_id in song_ids:
             self._song_repo.get_by_id(song_id)
             self._playlist_repo.add_song(playlist_id, song_id)
@@ -116,6 +126,32 @@ class PlaylistService:
         return reference_minutes * 60 * 1000 - self.get_stats(
             playlist_id
         ).total_duration_ms
+
+    def export_table(
+        self,
+        playlist_id: int,
+        destination: str | Path,
+        fmt: PlaylistTableFormat | str | None = None,
+    ) -> Path:
+        """Export a playlist as a CSV / Markdown table.
+
+        Args:
+            playlist_id: Playlist to export (items are read in display order).
+            destination: Target file path. An unknown extension is replaced
+                with the extension matching *fmt* (CSV by default).
+            fmt: Explicit output format; inferred from the path when omitted.
+
+        Returns:
+            The path actually written.
+        """
+        playlist = self._playlist_repo.get_by_id(playlist_id)
+        resolved = coerce_format(fmt) if fmt is not None else None
+        path = write_playlist_table(playlist, destination, resolved)
+        logger.info(
+            "Exported playlist table id=%d (%d items) to %s",
+            playlist_id, len(playlist.items), path,
+        )
+        return path
 
     def validate_export(self, playlist_id: int) -> list[str]:
         """Return warnings for playlist source files missing from disk."""

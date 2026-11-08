@@ -266,3 +266,9 @@ class SeparatedTrackService:
     def get_separated_tracks_count(self, song_id: int) -> int:
         """Return the number of separated tracks for a song."""
         return len(self._separated_track_repo.get_by_song(song_id))
+
+    def get_track_counts(self, song_ids: list[int]) -> dict[int, int]:
+        """Return ``{song_id: track_count}`` for many songs in one query batch."""
+        if not song_ids:
+            return {}
+        return self._separated_track_repo.count_by_song_ids(song_ids)

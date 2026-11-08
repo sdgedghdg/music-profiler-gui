@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import tkinter as tk
 from tkinter import messagebox
 
 import ttkbootstrap as ttk
@@ -15,6 +16,7 @@ from services.process_service import ProcessService
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_LUFS = -16
 _CH: dict[str, int] = {t("process.mono"): 1, t("process.stereo"): 2}
 
 
@@ -164,6 +166,14 @@ class ProcessPanel(ttk.Frame):
                 format_duration(song.duration_ms)))
             self._songs[iid] = song
 
+    def _target_lufs(self) -> float:
+        """Read the target LUFS, tolerating an emptied spinbox."""
+        try:
+            return float(self._lufs.get())
+        except (tk.TclError, ValueError):
+            self._lufs.set(_DEFAULT_LUFS)
+            return float(_DEFAULT_LUFS)
+
     def _on_transcode(self) -> None:
         ids = self._selected_ids()
         if not ids:
@@ -178,7 +188,7 @@ class ProcessPanel(ttk.Frame):
             sample_rate_hz=int(self._sample_rate.get()),
             channels=_CH[self._channels.get()],
             target_loudness_lufs=(
-                float(self._lufs.get())
+                self._target_lufs()
                 if self._do_norm.get() else None))
         try:
             task = self._process_service.transcode_batch(ids, config)
@@ -201,7 +211,7 @@ class ProcessPanel(ttk.Frame):
             return
         try:
             task = self._process_service.normalize_loudness_batch(
-                ids, float(self._lufs.get()))
+                ids, self._target_lufs())
         except Exception as exc:
             logger.exception("Failed to create loudness task")
             messagebox.showerror(t("process.task_error"), str(exc), parent=self)

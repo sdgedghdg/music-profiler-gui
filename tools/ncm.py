@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +12,8 @@ from pathlib import Path
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from core.exceptions import NcmDecryptionError
+
+logger = logging.getLogger(__name__)
 
 _CORE_KEY = bytes.fromhex("687a4852416d736f356b496e62617857")
 _META_KEY = bytes.fromhex("2331346c6a6b5f215c5d2630553c2728")
@@ -78,8 +81,11 @@ class NcmDecryptor:
             ).decode("utf-8")
             _, raw_json = decoded.split(":", 1)
             data = json.loads(raw_json)
-        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise NcmDecryptionError(f"Invalid NCM metadata: {exc}") from exc
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError, NcmDecryptionError) as exc:
+            # Metadata is cosmetic: a damaged metadata block must not make an
+            # otherwise decryptable file unimportable.  Fall back to no metadata.
+            logger.warning("Ignoring unreadable NCM metadata: %s", exc)
+            return {}
         if "mainMusic" in data:
             data = data["mainMusic"]
         artists = data.get("artist", [])

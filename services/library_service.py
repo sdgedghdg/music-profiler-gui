@@ -135,6 +135,16 @@ class LibraryService:
         """Return a song by its id."""
         return self._song_repo.get_by_id(song_id)
 
+    def count(self) -> int:
+        """Return the total number of songs in the library."""
+        return self._song_repo.count()
+
+    def get_separated_tracks_counts(self, song_ids: list[int]) -> dict[int, int]:
+        """Return how many separated tracks each song has, in one query batch."""
+        if self._separated_track_service is None:
+            return {}
+        return self._separated_track_service.get_track_counts(song_ids)
+
     def search(self, **kwargs) -> list[Song]:
         """Search songs with optional filters."""
         return self._song_repo.search(**kwargs)

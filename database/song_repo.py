@@ -12,6 +12,9 @@ from database.serializers import row_to_song, row_to_tag
 
 logger = logging.getLogger(__name__)
 
+#: Maximum number of host parameters per SQLite ``IN (...)`` clause.
+_TAG_BATCH_SIZE = 900
+
 
 class SongRepo:
     """Repository for Song and Tag database operations."""
@@ -161,9 +164,13 @@ class SongRepo:
         sql = f"SELECT * FROM songs {where} {order} LIMIT ? OFFSET ?"
         params.extend([limit, offset])
         rows = self._conn.execute(sql, params).fetchall()
-        return [
-            self._hydrate_tags(row_to_song(r), r["id"]) for r in rows
-        ]
+        if not rows:
+            return []
+        songs = [row_to_song(r) for r in rows]
+        tag_map = self._get_tags_for_songs([song.id for song in songs])
+        for song in songs:
+            song.tags = tag_map.get(song.id, [])
+        return songs
 
     def count(self) -> int:
         """Return the total number of songs in the database."""
@@ -227,3 +234,26 @@ class SongRepo:
         """Attach tag list to a song and return it."""
         song.tags = self.get_tags(song_id)
         return song
+
+    def _get_tags_for_songs(self, song_ids: list[int]) -> dict[int, list[Tag]]:
+        """Batch-load tags for many songs using a bounded number of queries.
+
+        Avoids the N+1 pattern of calling :meth:`get_tags` once per song.
+        SQLite caps host parameters (typically 999), so ids are chunked.
+        """
+        result: dict[int, list[Tag]] = {}
+        if not song_ids:
+            return result
+        for start in range(0, len(song_ids), _TAG_BATCH_SIZE):
+            chunk = song_ids[start:start + _TAG_BATCH_SIZE]
+            placeholders = ",".join("?" for _ in chunk)
+            rows = self._conn.execute(
+                "SELECT st.song_id AS song_id, t.id, t.name FROM song_tags st "
+                "INNER JOIN tags t ON t.id = st.tag_id "
+                f"WHERE st.song_id IN ({placeholders}) "
+                "ORDER BY t.name",
+                chunk,
+            ).fetchall()
+            for row in rows:
+                result.setdefault(row["song_id"], []).append(row_to_tag(row))
+        return result

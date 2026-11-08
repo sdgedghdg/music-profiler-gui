@@ -130,28 +130,41 @@ class ConfigService:
     # -- validation ---------------------------------------------------- #
 
     def validate_tool(self, tool_name: str) -> bool:
-        """Check a single tool by running ``{path} --version``.
+        """Check a single tool by running its version flag.
+
+        Tries ``{path} --version`` first and falls back to ``{path} -version``
+        when the first form exits non-zero: ffmpeg / ffprobe reject the GNU
+        style ``--version`` but accept the single-dash ``-version``.
 
         Returns:
-            ``True`` if the tool returned exit code 0, ``False`` otherwise
-            (including when the path is ``None`` or the process fails).
+            ``True`` if either invocation returned exit code 0, ``False``
+            otherwise (including when the path is ``None`` or the process
+            fails).
         """
         path = self.get_tool_path(tool_name)
         if not path:
             return False
-        try:
-            result = subprocess.run(
-                [path, "--version"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                encoding="utf-8",
-                errors="replace",
-            )
-            return result.returncode == 0
-        except (subprocess.TimeoutExpired, OSError, ValueError) as exc:
-            logger.warning("Tool validation failed for %s: %s", path, exc)
-            return False
+        for flag in ("--version", "-version"):
+            try:
+                result = subprocess.run(
+                    [path, flag],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+            except (subprocess.TimeoutExpired, OSError, ValueError) as exc:
+                logger.warning("Tool validation failed for %s: %s", path, exc)
+                return False
+            if result.returncode == 0:
+                return True
+        logger.warning(
+            "Tool validation failed for %s: neither --version nor -version "
+            "returned exit code 0",
+            path,
+        )
+        return False
 
     def validate_tools(self) -> dict[str, bool]:
         """Validate every configured tool.

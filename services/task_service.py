@@ -158,6 +158,7 @@ class TaskService:
                     except Exception:
                         logger.exception("Error polling DB for pending tasks")
         finally:
+            self._cancel_queued_tasks()
             if worker_conn is not None:
                 worker_conn.close()
                 logger.debug("Worker DB connection closed")
@@ -166,6 +167,36 @@ class TaskService:
             self._worker_playlist_repo = None
             self._worker_separated_track_repo = None
         logger.debug("Worker loop exited")
+
+    def _cancel_queued_tasks(self) -> None:
+        """Cancel tasks still waiting in the queue when the worker stops.
+
+        Without this, a shutdown leaves unstarted PENDING rows in the database
+        forever, which shows up as permanent "pending" rows in the task monitor.
+        Must run before the worker connection is closed.
+        """
+        repo = self._worker_task_repo
+        if repo is None:
+            return
+        cancelled = 0
+        while True:
+            try:
+                queued = self._queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                current = repo.get_by_id(queued.id)
+            except TaskNotFoundError:
+                continue
+            if current.status != TaskStatus.PENDING:
+                continue
+            try:
+                repo.update_status(current.id, TaskStatus.CANCELLED)
+                cancelled += 1
+            except Exception:
+                logger.exception("Failed to cancel queued task id=%s", queued.id)
+        if cancelled:
+            logger.info("Cancelled %d queued task(s) on shutdown", cancelled)
 
     def _init_executors(self) -> None:
         """Create executors wired to worker-owned repos."""
@@ -200,19 +231,35 @@ class TaskService:
             return
         logger.info("Processing task id=%d type=%s", current.id, current.task_type.value)
         self._worker_task_repo.update_status(current.id, TaskStatus.RUNNING)
-        self._notify_callbacks()
+        self._notify_callbacks(self._worker_task_repo)
         try:
             self._execute_task(current)
-            self._worker_task_repo.update_status(current.id, TaskStatus.DONE, progress=1.0)
-            logger.info("Task id=%d completed successfully", current.id)
+            # A shutdown during execution means the batch was interrupted
+            # mid-way — never report such a task as DONE.  A batch that did
+            # finish every item (progress reached 1.0) is still reported as
+            # DONE, even if the shutdown flag was set during the bookkeeping.
+            if self._shutdown_event.is_set() and current.progress < 1.0:
+                self._worker_task_repo.update_status(current.id, TaskStatus.CANCELLED)
+                logger.info("Task id=%d cancelled (shutdown in progress)", current.id)
+            else:
+                self._worker_task_repo.update_status(current.id, TaskStatus.DONE, progress=1.0)
+                logger.info("Task id=%d completed successfully", current.id)
         except Exception as exc:
-            logger.exception("Task id=%d failed: %s", current.id, exc)
-            self._worker_task_repo.update_status(
-                current.id, TaskStatus.FAILED,
-                progress=current.progress, error_msg=str(exc),
-            )
+            # Executors raise when an interrupted batch had no successful item
+            # ("All N … failed").  If the shutdown flag is already set, this is
+            # an interruption, not a failure — report it consistently as
+            # CANCELLED instead of FAILED.
+            if self._shutdown_event.is_set():
+                logger.info("Task id=%d cancelled (interrupted: %s)", current.id, exc)
+                self._worker_task_repo.update_status(current.id, TaskStatus.CANCELLED)
+            else:
+                logger.exception("Task id=%d failed: %s", current.id, exc)
+                self._worker_task_repo.update_status(
+                    current.id, TaskStatus.FAILED,
+                    progress=current.progress, error_msg=str(exc),
+                )
         finally:
-            self._notify_callbacks()
+            self._notify_callbacks(self._worker_task_repo)
 
     # -- Task execution dispatch -------------------------------------
     def _execute_task(self, task: TaskInfo) -> None:
@@ -229,12 +276,18 @@ class TaskService:
             )
 
     # -- Callback helpers --------------------------------------------
-    def _notify_callbacks(self) -> None:
-        """Call every subscribed callback with the full task list."""
+    def _notify_callbacks(self, task_repo: TaskRepo | None = None) -> None:
+        """Call every subscribed callback with the full task list.
+
+        *task_repo* must be the repo owned by the calling thread: the worker
+        thread passes ``self._worker_task_repo`` so that its own SQLite
+        connection is used instead of the main thread's connection.
+        """
         if not self._callbacks:
             return
+        repo = task_repo or self._task_repo
         try:
-            tasks = self._task_repo.get_all()
+            tasks = repo.get_all()
         except Exception:
             logger.exception("Failed to fetch tasks for callback notification")
             return

@@ -7,6 +7,9 @@ import sqlite3
 from core.models import SeparatedTrack
 from database.serializers import row_to_separated_track
 
+#: Maximum number of host parameters per SQLite ``IN (...)`` clause.
+_COUNT_BATCH_SIZE = 900
+
 
 class SeparatedTrackRepo:
     """CRUD operations for the separated_tracks table."""
@@ -60,6 +63,23 @@ class SeparatedTrackRepo:
         if row is None:
             return None
         return row_to_separated_track(row)
+
+    def count_by_song_ids(self, song_ids: list[int]) -> dict[int, int]:
+        """Return ``{song_id: count}`` for many songs using one SQL query."""
+        if not song_ids:
+            return {}
+        counts: dict[int, int] = {}
+        for start in range(0, len(song_ids), _COUNT_BATCH_SIZE):
+            chunk = song_ids[start:start + _COUNT_BATCH_SIZE]
+            placeholders = ",".join("?" for _ in chunk)
+            rows = self._conn.execute(
+                "SELECT song_id, COUNT(*) AS cnt FROM separated_tracks "
+                f"WHERE song_id IN ({placeholders}) GROUP BY song_id",
+                chunk,
+            ).fetchall()
+            for row in rows:
+                counts[row["song_id"]] = row["cnt"]
+        return counts
 
     # ------------------------------------------------------------------ #
     #  Delete

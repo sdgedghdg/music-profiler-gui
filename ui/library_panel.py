@@ -45,6 +45,7 @@ class LibraryPanel(ttk.Frame):
         self._on_playlist_changed = on_playlist_changed
         self._songs: list[Song] = []
         self._total_count: int = 0
+        self._context_menu: Menu | None = None
         self._build_ui()
         self._refresh_song_list()
 
@@ -127,8 +128,7 @@ class LibraryPanel(ttk.Frame):
     # -------------------------------------------------------------------
     def _refresh_song_list(self) -> None:
         """Reload songs from the service and repopulate the treeview."""
-        self._total_count = len(
-            self._library_service.search(limit=100_000))
+        self._total_count = self._library_service.count()
 
         query = self._search_var.get().strip()
         fmt_val = self._format_var.get()
@@ -137,12 +137,15 @@ class LibraryPanel(ttk.Frame):
         self._songs = self._library_service.search(
             query=query, format=format_filter, limit=100_000)
 
+        # One batched query instead of one round-trip per row.
+        track_counts = self._library_service.get_separated_tracks_counts(
+            [song.id for song in self._songs])
+
         self._tree.delete(*self._tree.get_children())
         for song in self._songs:
             vocal_col = ""
             if song.has_vocal_removed:
-                count = self._library_service.get_separated_tracks_count(
-                    song.id)
+                count = track_counts.get(song.id, 0)
                 vocal_col = f"✓ ({count} tracks)"
             self._tree.insert("", END, iid=str(song.id), values=(
                 song.title, song.artist, song.album,
@@ -246,8 +249,11 @@ class LibraryPanel(ttk.Frame):
             try:
                 result = self._library_service.import_separated_tracks(folder)
             except Exception as exc:
+                # Python 3 clears ``exc`` after the except block, so bind the
+                # message before scheduling the callback on the Tk thread.
+                message = str(exc)
                 self.after(0, lambda: messagebox.showerror(
-                    t("library.import_separated_error"), str(exc)))
+                    t("library.import_separated_error"), message))
                 return
             self.after(0, lambda: self._status_var.set(
                 t("library.import_separated_result").format(
@@ -301,7 +307,11 @@ class LibraryPanel(ttk.Frame):
         if not self._tree.selection():
             return
         song_id = int(self._tree.selection()[0])
+        # Reuse one menu widget instead of leaking a new one per right-click.
+        if self._context_menu is not None:
+            self._context_menu.destroy()
         menu = Menu(self, tearoff=0)
+        self._context_menu = menu
         menu.add_command(label=t("library.add_original_to_default"),
                          command=lambda: self._add_to_default_playlist(False))
         menu.add_command(label=t("library.add_instrumental_to_default"),
